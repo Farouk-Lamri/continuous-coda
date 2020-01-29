@@ -1,0 +1,19 @@
+- name: install coda
+  tasks:
+    - name: clean repositories
+      apt:
+        name: coda-testnet-postake-medium-curves
+        state: absent
+    - name: still clean up
+      apt:
+        name: coda-kademlia
+        state: absent
+    - name: add coda repository
+      apt_repository:
+        repo: "deb [trusted=yes] http://packages.o1test.net release main"
+        filename: coda
+        update_cache: yes
+    - name: update repository after coda added
+      apt:
+        name: coda-testnet-postake-medium-curves
+        state: present

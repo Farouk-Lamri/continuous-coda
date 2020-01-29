@@ -1,0 +1,62 @@
+{
+  "variables": {
+    "profile"             : "{{env `AWS_PROFILE`}}",
+    "region"              : "{{env `AWS_REGION`}}",
+    "build_instance_type" : "{{env `AWS_INSTANCE_TYPE`}}",
+    "source_ami"          : "{{env `AWS_SOURCE_AMI`}}",
+    "distribution"        : "{{env `AWS_DISTRIBUTION`}}",
+    "distribution_user"   : "{{env `AWS_AMI_USER`}}",
+    "playbook_version"    : "dev"
+  },
+  "builders": [{
+    "type"                         : "amazon-ebs",
+    "force_deregister"             : true,
+    "force_delete_snapshot"        : true,
+    "associate_public_ip_address"  : true,
+    "profile"                      : "{{user `profile`}}",
+    "region"                       : "{{user `region`}}",
+    "instance_type"                : "{{user `build_instance_type`}}",
+    "source_ami"                   : "{{user `source_ami`}}",
+    "ssh_username"                 : "{{user `distribution_user`}}",
+    "ami_name"                     : "continuous-coda-{{user `playbook_version`}}",
+    "ami_description"              : "{{user `distribution`}} Bastion",
+    "subnet_id"                    : "{{env `BUILD_SUBNET_ID`}}",
+    "user_data_file"               : "{{user `user_data_path`}}",
+    "ami_users"                    : [ "327249545079" ],
+    "tags": {
+      "Name"             : "continuous-coda",
+      "playbook_version" : "{{user `playbook_version`}}",
+      "SourceAmi"        : "{{user `source_ami`}}"
+    },
+    "run_tags"                     : {
+      "Name"      : "Packer Builder for CodaProtocol",
+      "playbook_version" : "{{user `playbook_version`}}",
+      "SourceAmi"        : "{{user `source_ami`}}"
+    }
+  }],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo apt-add-repository ppa:ansible/ansible",
+        "sudo apt-get update",
+        "sudo apt-get install ansible"
+      ]
+    },
+    {
+      "type": "ansible-local",
+      "playbook_files": [
+        "../playbooks/common.yaml",
+        "../playbooks/default.yaml"
+      ],
+      "playbook_dir": "./ansible/"
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "sudo rm /root/.ssh/authorized_keys /home/ec2-user/.ssh/authorized_keys /var/log/lastlog /var/log/wtmp /var/log/btmp",
+        "history -c"
+      ]
+    }
+  ]
+}

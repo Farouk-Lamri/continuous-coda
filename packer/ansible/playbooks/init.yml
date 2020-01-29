@@ -1,0 +1,5 @@
+- name: prepare ubuntu
+  tasks:
+    - name: update repositoty cache
+      apt:
+        update_cache: yes

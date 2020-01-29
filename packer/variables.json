@@ -1,0 +1,7 @@
+{
+  "region"              : "us-east-1",
+  "build_instance_type" : "t2.nano",
+  "distribution"        : "Ubuntu",
+  "distribution_user"   : "ec2-user",
+  "source_ami"          : "ami-00068cd7555f543d5"
+}
