@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: coda infra
+
+
+Parameters:
+  BastionAmiId:
+    Type: String
+  KeyName:
+    Type: String
+  BucketInfra:
+    Description: Infrastructure bucket
+    Type: String
+  # Coda Parameters
+  CodaAmiId:
+    Description: 'AMI id for Coda server.'
+    Type: AWS::EC2::Image::Id
+  CodaInstanceType:
+    Description: "Coda EC2 instance type."
+    ConstraintDescription: 'must be a valid EC2 instance type.'
+    Type: String
+    AllowedValues:
+      - c5.2xlarge
+    Default: "c5.2xlarge"
+  # Coda Parameters
+  CodaWorkerAmiId:
+    Description: 'AMI id for Coda server.'
+    Type: AWS::EC2::Image::Id
+  CodaWorkerMinSize:
+    Description: 'The Min Size for the Coda worker AutoScale group.'
+    Type: Number
+    Default: 1
+  CodaWorkerMaxSize:
+    Description: 'The Max Size for the Coda worker AutoScale group.'
+    Type: Number
+    Default: 1
+
+Resources:
+  CodaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/application/"
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+
+
+  VpcStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: vpc.yml
+      TimeoutInMinutes: 60
+
+  BastionStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - VpcStack
+    Properties:
+      TemplateURL: bastion.yml
+      TimeoutInMinutes: 30
+      Parameters:
+        Vpc: !GetAtt VpcStack.Outputs.Vpc
+        Subnet: !GetAtt VpcStack.Outputs.PublicSubnet1
+        KeyName: !Ref KeyName
+        AmiId: !Ref BastionAmiId
+        SecurityGroups:
+          - !Ref "AWS::NoValue"
+
+
+
+
+
+  CodaWorkerStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - BastionStack
+      - VpcStack
+    Properties:
+      TemplateURL: auto-scalling-group.yml
+      TimeoutInMinutes: 30
+      Parameters:
+        VpcId: !GetAtt VpcStack.Outputs.Vpc
+        CodaAmiId: !Ref CodaWorkerAmiId
+        CodaRole: !Ref CodaRole
+        KeyName: !Ref KeyName
+        MinSize: !Ref CodaWorkerMinSize
+        MaxSize: !Ref CodaWorkerMaxSize
+        InstanceType: !Ref CodaInstanceType
+        SecurityGroups:
+          - !GetAtt BastionStack.Outputs.ClientSecurityGroup
+        Subnets: !GetAtt VpcStack.Outputs.PublicSubnets
+        AvailabilityZones: !GetAtt VpcStack.Outputs.AvailabilityZones

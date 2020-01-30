@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Coda  worker Stack"
+
+Parameters:
+  VpcId:
+    Description: 'VPC identifier.'
+    Type: String
+  CodaAmiId:
+    Description: 'AMI id for instance.'
+    Type: AWS::EC2::Image::Id
+  CodaRole:
+    Description: 'Coda IAM Role'
+    Type: String
+  KeyName:
+    Description: 'The EC2 Key Pair to allow Remote Desktop access or SSH to the instances.'
+    Type: AWS::EC2::KeyPair::KeyName
+  ProductBucketName:
+    Description: 'Product bucket name'
+    Type: String
+  MinSize:
+    Description: 'The Min Size for the AutoScalingGroup.'
+    Type: Number
+    Default: 1
+  MaxSize:
+    Description: 'The Max Size for the AutoScalingGroup.'
+    Type: Number
+    Default: 1
+  InstanceType:
+    Description: "EC2 instance type."
+    ConstraintDescription: 'must be a valid EC2 instance type.'
+    Type: String
+    AllowedValues: c5.2xlarge
+    
+  SecurityGroups:
+    Description: 'Security Group identifiers.'
+    Type: String
+  Subnets:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+    Description: 'Vpc Public Subnet list'
+  AvailabilityZones:
+    Description: 'Availability zones to use for autoscaling'
+    Type: 'List<AWS::EC2::AvailabilityZone::Name>'
+  PrivateBaseDomain:
+    Type: String
+    Description: "Internal domain"
+
+Conditions:
+  hasSecurityGroups: !Not [ !Equals [ !Ref SecurityGroups, "" ]  ]
+
+Resources:
+  Profile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref CodaRole
+
+#  CloudwatchPolicy:
+#     Type: AWS::IAM::Policy
+#     Properties:
+#       PolicyName: CloudwatchPolicy
+#       Roles:
+#       - !Ref CodaRole
+#     PolicyDocument:
+#         Version: '2012-10-17'
+#         Statement:
+#         - Action:
+#           - s3:GetObject
+#           - s3:PutObject
+#           - s3:DeleteObject
+#           - s3:ListObjects
+#           - s3:ListBucket
+#           - s3:GetObjectAcl
+#           - s3:PutObjectAcl
+#           - s3:ListBucketMultipartUploads
+#           - s3:AbortMultipartUpload
+#           Effect: Allow
+#           Resource:
+#           - !Join [ '', [ 'arn:aws:s3:::', !Ref ProductBucketName, '' ]]
+#           - !Join [ '', [ 'arn:aws:s3:::', !Ref ProductBucketName, '/*' ]]
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Coda security group"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8001
+          ToPort: 8001
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8002
+          ToPort: 8002
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8003
+          ToPort: 8003
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      AssociatePublicIpAddress: 'true'
+      ImageId: !Ref CodaAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref Profile
+      InstanceMonitoring: 'true'
+      SecurityGroups: !If [
+        hasSecurityGroups,
+        !Split [ ',', !Sub "${SecurityGroup},${SecurityGroups}" ],
+        !Split [ ',', !Sub "${SecurityGroup}" ]
+      ]
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            VolumeSize: 16
+            VolumeType: gp2
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash -v
+            ########################################
+            ## CloudFormation Instances Bootstrap ##
+            ########################################
+
+            cfn-signal -e $? --stack '${AWS::StackName}' --region '${AWS::Region}' --resource AutoScalingGroup
+
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT5M
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime : PT5M
+        WaitOnResourceSignals: true
+    Properties:
+      Cooldown: '600'
+      HealthCheckGracePeriod: '60'
+      AvailabilityZones: !Ref AvailabilityZones
+      VPCZoneIdentifier: !Ref Subnets
+      HealthCheckType: EC2
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+      DesiredCapacity: !Ref MinSize
+      TerminationPolicies:
+        - OldestInstance
+      Tags:
+        -
+          Key: Network
+          Value: Public
+          PropagateAtLaunch: 'true'
+        -
+          Key: Name
+          Value: 'Coda-worker'
+          PropagateAtLaunch: 'true'
+
+Outputs:
+  AutoScalingGroup:
+    Description: 'Auto Scaling Group'
+    Value: !Ref AutoScalingGroup
+  LaunchConfig:
+    Description: 'Launch Configuration'
+    Value: !Ref LaunchConfig

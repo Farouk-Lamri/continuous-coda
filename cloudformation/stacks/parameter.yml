@@ -1,0 +1,110 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Parameter Stack
+
+
+Parameters:
+  PrId:
+    Description: Pull Request ID (only for testing)
+    Type: String
+  BaseDomain:
+    Description: Based domain of application
+    Type: String
+
+
+Conditions:
+  alwaysFalse: !Equals [ '1', '0' ]
+  isPr: !Not [ !Equals [ !Ref PrId, '' ] ]
+
+
+Mappings:
+  Parameters:
+    PrivateBaseDomain:
+      Default: 'achille.aws'
+
+
+Resources:
+  NoopResource:
+      Type: AWS::IAM::User
+      Condition: alwaysFalse
+
+
+Outputs:
+  PrivateBaseDomain:
+    Description: Internal domain
+    Value: !If [ isPr,
+      !Join [ -, [
+        !Ref PrId,
+        !FindInMap [Parameters, PrivateBaseDomain, Default]
+      ]],
+      !FindInMap [Parameters, PrivateBaseDomain, Default]
+    ]
+
+  AppDomain:
+    Description: Application Domain
+    Value: !If [ isPr,
+      !Sub '${PrId}.${BaseDomain}',
+      !Ref BaseDomain
+    ]
+
+  ProfileDomain:
+    Description: Environment sub domain
+    Value: !If [ isPr,
+      !Sub 'profile-${PrId}.${BaseDomain}',
+      !Sub 'profile.${BaseDomain}'
+    ]
+
+  ApiDomain:
+    Description: Environment sub domain
+    Value: !If [ isPr,
+      !Sub 'api-${PrId}.${BaseDomain}',
+      !Sub 'api.${BaseDomain}'
+    ]
+
+  AuthDomain:
+    Description: Environment sub domain
+    Value: !If [ isPr,
+      !Sub 'login-${PrId}.${BaseDomain}',
+      !Sub 'login.${BaseDomain}'
+    ]
+
+  AkeneoDomain:
+    Description: Akeneo sub domain
+    Value: !If [ isPr,
+      !Sub 'pim-${PrId}.${BaseDomain}',
+      !Sub 'pim.${BaseDomain}'
+    ]
+  
+  ElasticDomain:
+    Description: Elasticsearch service domain
+    Value: !If [ isPr,
+      !Sub 'achille-index-${PrId}',
+      achille-index
+    ]
+
+  ElkCognitoDomain:
+    Description: Kibana Cognito Login Domain
+    Value: !If [ isPr,
+      !Sub 'login-elk-${PrId}.${BaseDomain}',
+      !Sub 'login-elk.${BaseDomain}'
+    ]
+
+  ApiDocDomain:
+    Description: Kibana Cognito Login Domain
+    Value: !If [ isPr,
+      !Sub 'api-doc-${PrId}.${BaseDomain}',
+      !Sub 'api-doc.${BaseDomain}'
+    ]
+
+  DynamoPrefixTableName:
+    Description: DynamoDB Table name prefix by Project Name
+    Value: !If [ isPr,
+      !Sub 'achille.pr${PrId}',
+      !Sub 'achille'
+    ]
+
+  AkeneoImagesDomain:
+    Description: Akeneo sub domain
+    Value: !If [ isPr,
+                 !Sub 'product-assets-${PrId}.${BaseDomain}',
+                 !Sub 'product-assets.${BaseDomain}'
+    ]
